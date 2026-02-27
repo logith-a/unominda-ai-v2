@@ -23,7 +23,7 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
-# 🔑 Get API key from environment variable ONLY - NEVER hardcode!
+# 🔑 Get API key from environment variable ONLY
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 if not GROQ_API_KEY:
     print("="*70)
@@ -33,7 +33,6 @@ if not GROQ_API_KEY:
     print("  - Local PowerShell: $env:GROQ_API_KEY='your-key'")
     print("  - Render Dashboard: Add to Environment variables")
     print("="*70)
-    # No fallback - will fail gracefully
 
 # Initialize Groq client
 try:
@@ -66,7 +65,7 @@ class WebPDFChatbot:
         self.last_topic = ""
         self.load_pdfs()
     
-    # ===== READ PDFs =====
+    # ===== FEATURE 1: PDF TEXT EXTRACTION WITH OCR =====
     def extract_text_with_ocr(self, pdf_path):
         doc = fitz.open(pdf_path)
         text_content = ""
@@ -106,7 +105,7 @@ class WebPDFChatbot:
         
         return text_content, pages
     
-    # ===== EXTRACT IMAGES =====
+    # ===== FEATURE 2: IMAGE EXTRACTION FROM PDFs =====
     def extract_actual_images(self, pdf_path, file_name):
         doc = fitz.open(pdf_path)
         images_found = []
@@ -137,7 +136,7 @@ class WebPDFChatbot:
         
         return images_found
     
-    # ===== LOAD PDFs =====
+    # ===== FEATURE 3: LOAD ALL PDFs =====
     def load_pdfs(self):
         print("📚 Loading PDFs...")
         
@@ -176,7 +175,7 @@ class WebPDFChatbot:
         
         print(f"✅ Loaded {len(self.pdf_files)} PDFs, {len(self.pages_data)} pages, {len(self.extracted_images)} images")
     
-    # ===== UNDERSTAND INTENT =====
+    # ===== FEATURE 4: INTENT CLASSIFICATION =====
     def is_greeting(self, text):
         greetings = ['hi', 'hello', 'hey', 'வணக்கம்', 'vanakkam', 'नमस्ते']
         return text.lower().strip() in greetings
@@ -193,7 +192,34 @@ class WebPDFChatbot:
         image_words = ['pic', 'picture', 'image', 'photo', 'show', 'படம்', 'காட்டு']
         return any(word in text.lower() for word in image_words)
     
-    # ===== FIND IMAGES =====
+    def is_translation_request(self, text):
+        translation_words = ['in tamil', 'in hindi', 'தமிழில்', 'हिंदी में']
+        return any(word in text.lower() for word in translation_words)
+    
+    # ===== FEATURE 5: ANSWER LENGTH DETECTION =====
+    def detect_answer_length(self, question):
+        q = question.lower()
+        if any(word in q for word in ['short', 'brief', 'quick', 'summary']):
+            return 'short'
+        if any(word in q for word in ['detailed', 'elaborate', 'in depth']):
+            return 'detailed'
+        return 'medium'
+    
+    # ===== FEATURE 6: LANGUAGE DETECTION =====
+    def detect_language(self, text):
+        if re.search(r'[\u0B80-\u0BFF]', text):
+            return 'ta'
+        if re.search(r'[\u0900-\u097F]', text):
+            return 'hi'
+        tamil_words = ['enna', 'epdi', 'vanakkam', 'tamil']
+        if any(word in text.lower() for word in tamil_words):
+            return 'ta'
+        hindi_words = ['hindi', 'kya', 'hai']
+        if any(word in text.lower() for word in hindi_words):
+            return 'hi'
+        return 'en'
+    
+    # ===== FEATURE 7: IMAGE SEARCH WITH CONTEXT =====
     def find_relevant_images(self, query, max_images=4):
         if not self.extracted_images:
             return []
@@ -218,6 +244,10 @@ class WebPDFChatbot:
             if 'nwo' in search_query and 'nwo' in img_name:
                 score += 3
             if 'pcb' in search_query and 'pcb' in img_name:
+                score += 3
+            if 'wave' in search_query and 'wave' in img_name:
+                score += 3
+            if 'defect' in search_query and 'defect' in img_name:
                 score += 3
             
             if score > 0:
@@ -246,11 +276,13 @@ class WebPDFChatbot:
                 return f"📸 Here are {len(images)} soldering images:", img_list
             elif 'nwo' in query.lower():
                 return f"📸 Here are {len(images)} NWO images:", img_list
+            elif 'pcb' in query.lower():
+                return f"📸 Here are {len(images)} PCB images:", img_list
             else:
                 return f"📸 Here are {len(images)} images:", img_list
         return "Sorry, no images found.", []
     
-    # ===== SIMPLE RESPONSES =====
+    # ===== FEATURE 8: HUMAN-LIKE RESPONSES =====
     def get_greeting_response(self):
         return "Hi! 👋 How can I help you today?"
     
@@ -260,7 +292,7 @@ class WebPDFChatbot:
     def get_thanks_response(self):
         return "You're welcome! 😊 Happy to help!"
     
-    # ===== EXTRACT TOPIC =====
+    # ===== FEATURE 9: TOPIC EXTRACTION =====
     def extract_topic(self, text):
         text_lower = text.lower()
         if 'nwo' in text_lower:
@@ -275,9 +307,32 @@ class WebPDFChatbot:
             return 'pcb'
         elif 'wave' in text_lower:
             return 'wave soldering'
+        elif 'reflow' in text_lower:
+            return 'reflow'
+        elif 'paste' in text_lower:
+            return 'solder paste'
         return ''
     
-    # ===== ANSWER QUESTION =====
+    # ===== FEATURE 10: CONVERSATION HISTORY =====
+    def get_conversation_context(self):
+        if len(self.conversation_history) < 2:
+            return ""
+        
+        context = "Recent conversation:\n"
+        for entry in self.conversation_history[-4:]:
+            role = "User" if entry["role"] == "user" else "Assistant"
+            content = entry['content'][:100] + "..." if len(entry['content']) > 100 else entry['content']
+            context += f"{role}: {content}\n"
+        return context
+    
+    # ===== FEATURE 11: SMART MODEL SELECTION =====
+    def select_models(self, question):
+        if len(question) > 100 or 'explain' in question.lower():
+            return ['llama-3.3-70b-versatile', 'mixtral-8x7b-instruct-v0.1', 'llama-3.1-8b-instant']
+        else:
+            return ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it']
+    
+    # ===== FEATURE 12: MAIN ASK METHOD =====
     def ask(self, question):
         try:
             self.conversation_history.append({"role": "user", "content": question})
@@ -292,12 +347,21 @@ class WebPDFChatbot:
                     error_msg += "Check your API key."
                 return {"answer": error_msg, "images": []}
             
+            # Extract topic
             topic = self.extract_topic(question)
             if topic:
                 self.last_topic = topic
             print(f"📌 Topic: {self.last_topic}")
             
-            # Handle greetings
+            # Detect language
+            lang = self.detect_language(question)
+            print(f"🌐 Language: {lang}")
+            
+            # Detect answer length
+            length = self.detect_answer_length(question)
+            print(f"📏 Length: {length}")
+            
+            # Handle simple intents
             if self.is_greeting(question):
                 return {"answer": self.get_greeting_response(), "images": []}
             
@@ -314,31 +378,29 @@ class WebPDFChatbot:
                 return {"answer": msg, "images": img_list}
             
             # Prepare PDF context
-            context = "Here is information from UNOMINDA manuals:\n\n"
-            for i, page in enumerate(self.pages_data[:5]):
+            context = "Here is information from UNOMINDA technical manuals:\n\n"
+            for i, page in enumerate(self.pages_data[:8]):
                 context += f"[Page {page['page']} from {page['file']}]\n"
-                context += page['text'][:500] + "\n\n"
+                context += page['text'][:600] + "\n\n"
             
-            # Conversation context
-            conv_context = ""
-            if len(self.conversation_history) > 2:
-                conv_context = "Recent chat:\n"
-                for entry in self.conversation_history[-4:]:
-                    role = "User" if entry["role"] == "user" else "Assistant"
-                    content = entry['content'][:100] + "..." if len(entry['content']) > 100 else entry['content']
-                    conv_context += f"{role}: {content}\n"
+            # Get conversation context
+            conv_context = self.get_conversation_context()
             
-            # Topic context
+            # Topic context for follow-ups
             topic_context = ""
             if self.last_topic and len(question.split()) <= 3:
-                topic_context = f"They're asking about {self.last_topic}. Answer about that.\n"
+                topic_context = f"The user is asking about {self.last_topic}. Answer in that context.\n"
             
-            # Language detection
-            lang = 'en'
-            if re.search(r'[\u0B80-\u0BFF]', question):
-                lang = 'ta'
-            elif re.search(r'[\u0900-\u097F]', question):
-                lang = 'hi'
+            # Length instruction
+            length_instruction = {
+                'short': "Give a brief answer in 2-3 sentences.",
+                'detailed': "Give a detailed explanation with examples.",
+                'medium': "Give a clear, concise answer."
+            }.get(length, "Give a clear, concise answer.")
+            
+            # Language instruction
+            lang_names = {'en': 'English', 'ta': 'Tamil', 'hi': 'Hindi'}
+            lang_instruction = f"Answer in {lang_names.get(lang, 'English')}. {length_instruction}"
             
             prompt = f"""{context}
 
@@ -348,29 +410,27 @@ class WebPDFChatbot:
 
 Question: "{question}"
 
+{lang_instruction}
+
 RULES:
-1. Use SIMPLE words - like talking to a friend
-2. Be FRIENDLY and use emojis 😊
-3. If info is in the PDFs above, use it
-4. If not in PDFs, use your knowledge to help
-5. Keep answers short and sweet
-6. Answer in {'Tamil' if lang == 'ta' else 'Hindi' if lang == 'hi' else 'English'}
+1. Use SIMPLE, FRIENDLY language - like talking to a friend
+2. Use emojis 😊 to be warm and welcoming
+3. If information is in the PDFs above, use it and mention the page
+4. If not in PDFs, use your general knowledge to help
+5. NEVER say you don't know - always try to help
+6. Keep answers concise but complete
+7. Be helpful and encouraging
 
 Answer:"""
             
-            # ✅ CURRENT Groq models (as of 2026)
-            models_to_try = [
-                'llama-3.3-70b-versatile',    # Best quality, latest Llama
-                'llama-3.1-8b-instant',       # Fast, good for simple queries
-                'mixtral-8x7b-instruct-v0.1', # Alternative good model
-                'gemma2-9b-it'                 # Google's model on Groq
-            ]
+            # Select models based on complexity
+            models_to_try = self.select_models(question)
+            print(f"🎯 Models: {models_to_try}")
             
             for model_name in models_to_try:
                 try:
                     print(f"🎯 Trying Groq model: {model_name}")
                     
-                    # Groq API call
                     response = client.chat.completions.create(
                         model=model_name,
                         messages=[
@@ -386,24 +446,19 @@ Answer:"""
                         self.model_stats[model_name]['success'] += 1
                         self.conversation_history.append({"role": "assistant", "content": answer})
                         return {"answer": answer, "images": []}
-                    else:
-                        print(f"⚠️ Empty response from {model_name}")
-                        continue
                         
                 except Exception as e:
                     self.model_stats[model_name]['failure'] += 1
-                    error_str = str(e).lower()
-                    print(f"❌ Error with {model_name}: {str(e)}")
+                    print(f"❌ Error with {model_name}: {str(e)[:200]}")
                     
-                    if "quota" in error_str or "429" in error_str:
+                    if "quota" in str(e).lower() or "429" in str(e).lower():
                         print(f"⚠️ Rate limit for {model_name}, trying next...")
                         continue
-                    elif "auth" in error_str or "api_key" in error_str:
+                    elif "auth" in str(e).lower() or "api_key" in str(e).lower():
                         return {"answer": "❌ API Key error. Please check your Groq API key.", "images": []}
                     else:
                         continue
             
-            # If all models fail
             return {"answer": "I'm here to help! 😊 Please try asking again.", "images": []}
             
         except Exception as e:
@@ -448,17 +503,39 @@ def get_pdfs():
         'total_images': len(chatbot.extracted_images)
     })
 
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    return jsonify({
+        'models': chatbot.model_stats,
+        'conversation_count': len(chatbot.conversation_history)
+    })
+
+@app.route('/api/clear', methods=['POST'])
+def clear_conversation():
+    chatbot.conversation_history = []
+    chatbot.last_image_query = ""
+    chatbot.last_topic = ""
+    return jsonify({'success': True})
+
 if __name__ == '__main__':
     print("="*70)
-    print("🤖 UNOMINDA AI - GROQ VERSION")
+    print("🤖 UNOMINDA AI - ALL 12 FEATURES")
     print("="*70)
     print(f"📊 PDFs: {len(chatbot.pdf_files)} | Pages: {len(chatbot.pages_data)} | Images: {len(chatbot.extracted_images)}")
     print("="*70)
-    print("✅ CURRENT GROQ MODELS:")
-    print("   • llama-3.3-70b-versatile (best quality)")
-    print("   • llama-3.1-8b-instant (fast)")
-    print("   • mixtral-8x7b-instruct-v0.1")
-    print("   • gemma2-9b-it")
+    print("✅ FEATURES INCLUDED:")
+    print("   1️⃣ PDF Text Extraction with OCR")
+    print("   2️⃣ Image Extraction & Display")
+    print("   3️⃣ Intent Classification")
+    print("   4️⃣ Answer Length Detection")
+    print("   5️⃣ Language Detection")
+    print("   6️⃣ Translation Requests")
+    print("   7️⃣ Image Search with Context")
+    print("   8️⃣ Human-like Responses")
+    print("   9️⃣ Topic Extraction")
+    print("   🔟 Conversation History")
+    print("   1️⃣1️⃣ Smart Model Selection")
+    print("   1️⃣2️⃣ Usage Statistics")
     print("="*70)
     if GROQ_API_KEY:
         print("✅ GROQ_API_KEY is set in environment")
